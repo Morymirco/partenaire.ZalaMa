@@ -59,17 +59,23 @@ export default function EntrepriseSidebar() {
     >
       {/* Logo et titre */}
       <div className="flex items-center justify-between h-18 px-4 border-b border-[var(--zalama-border)]">
-        <Link href="/dashboard" className="flex items-center">
-          <div className="relative w-32 h-20 mr-3">
-            <Image 
-              src="/images/logo_vertical.svg" 
-              alt="ZaLaMa Logo" 
-              fill
-              className="object-contain"
-              
-            />
+        {!collapsed && (
+          <Link href="/dashboard" className="flex items-center">
+            <div className="relative w-32 h-20 mr-3">
+              <Image 
+                src="/images/logo_vertical.svg" 
+                alt="ZaLaMa Logo" 
+                fill
+                className="object-contain"
+              />
+            </div>
+          </Link>
+        )}
+        {collapsed && (
+          <div className="h-20 flex items-center justify-center w-full">
+            {/* Espace vide quand la sidebar est repliée */}
           </div>
-        </Link>
+        )}
         <button 
           onClick={toggleSidebar}
           className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
