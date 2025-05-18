@@ -8,7 +8,7 @@ const publicRoutes = ['/login'];
 const staticRoutes = ['/_next', '/api', '/images', '/fonts', '/favicon.ico'];
 
 export function middleware(request: NextRequest) {
-  const isLoggedIn = request.cookies.has('zalama-auth');
+  const session = request.cookies.get('session');
   const { pathname } = request.nextUrl;
   
   // Ignorer les routes statiques et les fichiers
@@ -17,14 +17,14 @@ export function middleware(request: NextRequest) {
   }
   
   // Si l'utilisateur n'est pas connecté et essaie d'accéder à une route protégée
-  if (!isLoggedIn && !publicRoutes.includes(pathname)) {
+  if (!session && !publicRoutes.includes(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
   // Si l'utilisateur est déjà connecté et essaie d'accéder à la page de login ou à la racine
-  if (isLoggedIn && (publicRoutes.includes(pathname) || pathname === '/')) {
+  if (session && (publicRoutes.includes(pathname) || pathname === '/')) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);

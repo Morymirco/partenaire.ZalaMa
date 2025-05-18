@@ -1,124 +1,226 @@
 "use client";
 
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
-import toast from 'react-hot-toast';
-import { Company, Admin, companies, authenticateAdmin, getCompanyById } from '@/data/companies';
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  updateDoc, 
+  serverTimestamp 
+} from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import { toast } from 'react-hot-toast';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// Interface pour le contexte d'authentification
-interface AuthContextType {
-  isAuthenticated: boolean;
-  currentCompany: Company | null;
-  currentAdmin: Admin | null;
-  login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+// Types pour notre contexte d'authentification
+type UserRole = 'admin' | 'rh' | null;
+
+interface AuthUser {
+  uid: string;
+  email: string | null;
+  role: UserRole;
+  displayName?: string | null;
+  photoURL?: string | null;
+  active?: boolean;
 }
 
+interface AuthContextType {
+  user: AuthUser | null;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  logout: () => Promise<void>;
+  isAdmin: boolean;
+  isRH: boolean;
+}
+
+// Création du contexte
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
-  const [currentAdmin, setCurrentAdmin] = useState<Admin | null>(null);
-  const router = useRouter();
-
-  // Vérifier si l'utilisateur est déjà connecté au chargement
-  useEffect(() => {
-    // Vérifier si le cookie d'authentification existe
-    const hasCookie = document.cookie.split(';').some(item => item.trim().startsWith('zalama-auth='));
-    const storedAdminId = localStorage.getItem('zalama-admin-id');
-    
-    if (hasCookie && storedAdminId) {
-      const adminData = JSON.parse(localStorage.getItem('zalama-admin-data') || '{}');
-      if (adminData && adminData.id) {
-        setIsAuthenticated(true);
-        setCurrentAdmin(adminData);
-        
-        // Récupérer les données de l'entreprise associée
-        const company = getCompanyById(adminData.companyId);
-        if (company) {
-          setCurrentCompany(company);
-        }
-      }
-    }
-  }, []);
-
-  // Fonction de connexion
-  const login = async (email: string, password: string): Promise<boolean> => {
-    try {
-      // Simuler un délai réseau
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Vérifier les identifiants
-      const admin = authenticateAdmin(email, password);
-      
-      if (admin) {
-        // Récupérer les données de l'entreprise associée
-        const company = getCompanyById(admin.companyId);
-        
-        if (company) {
-          // Mettre à jour l'état d'authentification et les données
-          setIsAuthenticated(true);
-          setCurrentAdmin(admin);
-          setCurrentCompany(company);
-          
-          // Sauvegarder les informations de connexion dans localStorage pour la persistance
-          localStorage.setItem('zalama-admin-id', admin.id);
-          localStorage.setItem('zalama-admin-data', JSON.stringify(admin));
-          
-          // Définir un cookie pour que le middleware puisse le détecter
-          document.cookie = `zalama-auth=true; path=/; max-age=86400`; // expire dans 24h
-          
-          // Notification de succès
-          toast.success(`Connexion réussie ! Bienvenue ${admin.name}`);
-          
-          // Forcer la redirection vers le dashboard
-          window.location.href = '/dashboard';
-          return true;
-        } else {
-          toast.error('Erreur: Entreprise non trouvée');
-          return false;
-        }
-      } else {
-        toast.error('Email ou mot de passe incorrect');
-        return false;
-      }
-    } catch (error) {
-      toast.error('Échec de la connexion. Veuillez réessayer.');
-      return false;
-    }
-  };
-
-  // Fonction de déconnexion
-  const logout = () => {
-    setIsAuthenticated(false);
-    setCurrentCompany(null);
-    setCurrentAdmin(null);
-    
-    // Supprimer les données du localStorage
-    localStorage.removeItem('zalama-admin-id');
-    localStorage.removeItem('zalama-admin-data');
-    
-    // Supprimer le cookie d'authentification
-    document.cookie = 'zalama-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-    
-    toast.success('Vous êtes déconnecté.');
-    window.location.href = '/login';
-  };
-
-
-
-  return (
-    <AuthContext.Provider value={{ isAuthenticated, currentCompany, currentAdmin, login, logout }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
+// Hook personnalisé pour utiliser le contexte
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth doit être utilisé à l\'intérieur d\'un AuthProvider');
   }
   return context;
-}
+};
+
+// Fonction de connexion
+const login = async (email: string, password: string): Promise<boolean> => {
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    // Vérifier les claims personnalisés pour déterminer le rôle
+    const idTokenResult = await user.getIdTokenResult();
+    const role = idTokenResult.claims.role;
+    
+    if (role === 'rh') {
+      // Si c'est un RH, vérifier que son compte est actif dans Firestore
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        if (!userData.active) {
+          // Si le compte est désactivé
+          await signOut(auth);
+          toast.error("Votre compte a été désactivé. Veuillez contacter l'administrateur.");
+          return false;
+        }
+        
+        // Mettre à jour la date de dernière connexion
+        await updateDoc(doc(db, 'users', user.uid), {
+          lastLogin: serverTimestamp()
+        });
+        
+        toast.success("Connexion réussie");
+        return true;
+      } else {
+        // Si les données utilisateur n'existent pas dans Firestore
+        await signOut(auth);
+        toast.error("Compte utilisateur incomplet. Veuillez contacter l'administrateur.");
+        return false;
+      }
+    } else if (role === 'admin') {
+      // Si c'est un admin, vérifier son statut dans Firestore
+      const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+      
+      if (adminDoc.exists()) {
+        const adminData = adminDoc.data();
+        
+        if (!adminData.active) {
+          // Si le compte admin est désactivé
+          await signOut(auth);
+          toast.error("Votre compte administrateur a été désactivé.");
+          return false;
+        }
+        
+        // Mettre à jour la date de dernière connexion
+        await updateDoc(doc(db, 'admins', user.uid), {
+          lastLogin: serverTimestamp()
+        });
+        
+        toast.success("Connexion administrateur réussie");
+        return true;
+      } else {
+        // Si les données admin n'existent pas dans Firestore
+        await signOut(auth);
+        toast.error("Compte administrateur incomplet.");
+        return false;
+      }
+    } else {
+      // Si l'utilisateur n'a pas de rôle valide
+      await signOut(auth);
+      toast.error("Votre compte n'a pas les autorisations nécessaires.");
+      return false;
+    }
+  } catch (error: any) {
+    console.error("Erreur de connexion:", error);
+    
+    // Messages d'erreur personnalisés selon le code d'erreur
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+      toast.error("Email ou mot de passe incorrect");
+    } else if (error.code === 'auth/too-many-requests') {
+      toast.error("Trop de tentatives de connexion. Veuillez réessayer plus tard.");
+    } else if (error.code === 'auth/user-disabled') {
+      toast.error("Ce compte a été désactivé.");
+    } else {
+      toast.error(error.message || "Échec de la connexion");
+    }
+    
+    return false;
+  }
+};
+
+// Fonction de déconnexion
+const logout = async (): Promise<void> => {
+  try {
+    await signOut(auth);
+    toast.success("Déconnexion réussie");
+  } catch (error: any) {
+    console.error("Erreur lors de la déconnexion:", error);
+    toast.error("Erreur lors de la déconnexion");
+  }
+};
+
+// Composant Provider
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Récupérer les claims personnalisés
+          const idTokenResult = await firebaseUser.getIdTokenResult();
+          const role = idTokenResult.claims.role as UserRole;
+          
+          // Récupérer les données supplémentaires selon le rôle
+          let userData: any = {};
+          
+          if (role === 'admin') {
+            const adminDoc = await getDoc(doc(db, 'admins', firebaseUser.uid));
+            if (adminDoc.exists()) {
+              userData = adminDoc.data();
+            }
+          } else if (role === 'rh') {
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (userDoc.exists()) {
+              userData = userDoc.data();
+            }
+          }
+          
+          // Créer l'objet utilisateur avec les données combinées
+          setUser({
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: role,
+            displayName: firebaseUser.displayName || userData.displayName,
+            photoURL: firebaseUser.photoURL || userData.photoURL,
+            active: userData.active
+          });
+        } catch (error) {
+          console.error("Erreur lors de la récupération des données utilisateur:", error);
+          setUser(null);
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    // Nettoyer l'abonnement lors du démontage
+    return () => unsubscribe();
+  }, []);
+
+  const isAdmin = user?.role === 'admin';
+  const isRH = user?.role === 'rh';
+
+  const value = {
+    user,
+    loading,
+    login,
+    logout,
+    isAdmin,
+    isRH
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export default AuthProvider; 
+
