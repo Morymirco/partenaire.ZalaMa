@@ -174,7 +174,7 @@ const noteFormatter = (value: number) => `${value.toFixed(1)}`;
 
 
 export default function AvisPage() {
-  const { isAuthenticated, currentCompany } = useAuth();
+  
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -188,20 +188,7 @@ export default function AvisPage() {
   // Créer la référence en dehors des hooks
   const hasFinishedLoading = React.useRef(false);
   
-  // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
-  
-  // Mettre fin au chargement quand l'entreprise est chargée
-  useEffect(() => {
-    if (currentCompany && !hasFinishedLoading.current) {
-      hasFinishedLoading.current = true;
-      setLoading(false);
-    }
-  }, [currentCompany]);
+
   
   // Gérer le clic en dehors du menu des filtres
   useEffect(() => {
@@ -299,7 +286,7 @@ export default function AvisPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold text-[var(--zalama-text)]">Avis des Salariés</h1>
-      <p className="text-[var(--zalama-text)]/70">Entreprise: {currentCompany?.name}</p>
+      <p className="text-[var(--zalama-text)]/70">Entreprise:</p>
       
       {/* Statistiques */}
       <h2 className="text-xl font-bold text-[var(--zalama-text)] mt-2">Statistiques des avis</h2>
