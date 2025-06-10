@@ -22,7 +22,7 @@ export default function EntrepriseSidebar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const { currentCompany, currentAdmin, logout } = useAuth();
+  // const { currentCompany, currentAdmin, logout } = useAuth();
   
   // Générer les liens de navigation avec le slug
   const navItems = getNavItems();
@@ -122,12 +122,13 @@ export default function EntrepriseSidebar() {
           >
             <div className={`flex items-center ${collapsed ? 'justify-center' : ''}`}>
               <div className="w-8 h-8 rounded-full bg-[var(--zalama-blue)] flex items-center justify-center text-white font-semibold flex-shrink-0">
-                {currentAdmin?.name.charAt(0) || 'A'}
+                {/* {currentAdmin?.name.charAt(0) || 'A'}
+                 */}
               </div>
               {!collapsed && (
                 <div className="ml-3 sidebar-text">
-                  <p className="text-sm font-medium">{currentCompany?.name || 'Entreprise'}</p>
-                  <p className="text-xs text-[var(--zalama-gray)]/60">{currentAdmin?.role || 'Administrateur'}</p>
+                  {/* <p className="text-sm font-medium">{currentCompany?.name || 'Entreprise'}</p> */}
+                  {/* <p className="text-xs text-[var(--zalama-gray)]/60">{currentAdmin?.role || 'Administrateur'}</p> */}
                 </div>
               )}
             </div>
@@ -140,7 +141,7 @@ export default function EntrepriseSidebar() {
                 <li>
                   <button 
                     className="flex w-full items-center px-4 py-2 text-sm text-red-400 hover:bg-red-500/10"
-                    onClick={logout}
+                    // onClick={logout}
                   >
                     <LogOut className="w-4 h-4 mr-2" />
                     Déconnexion

@@ -12,7 +12,7 @@ export default function EntrepriseHeader() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
-  const { logout, currentAdmin } = useAuth();
+  // const { logout, currentAdmin } = useAuth();
   
   // Obtenir le titre de la page en fonction du chemin
   const getPageTitle = () => {
@@ -74,14 +74,14 @@ export default function EntrepriseHeader() {
             >
               <User className="w-5 h-5 text-gray-600 dark:text-gray-300" />
               <span className="text-sm font-medium text-gray-700 dark:text-gray-200 hidden sm:inline">
-                {currentAdmin?.name || 'Admin'}
+                Admin
               </span>
             </button>
             
             {profileMenuOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700">
                 <button
-                  onClick={logout}
+                  // onClick={logout}
                   className="flex w-full items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   <LogOut className="w-4 h-4 mr-2" />
