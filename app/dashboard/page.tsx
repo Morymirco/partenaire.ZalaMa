@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Users, FileText, Star, BarChart2, CreditCard, Clock, AlertCircle, Download, Building2 } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
@@ -22,11 +22,42 @@ import {
   Pie,
   Cell
 } from 'recharts';
+import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
+// Types pour les données
+interface Company {
+  id: string;
+  name: string;
+  industry: string;
+  employeesCount: number;
+  logo: string;
+  createdAt: string;
+  stats: {
+    totalEmployes: number;
+    demandesMois: number;
+    montantTotal: number;
+    limiteRemboursement: string;
+    joursAvantRemboursement: number;
+    dateLimiteRemboursement: string;
+  };
+  financeData: {
+    demandes: any[];
+    avances: any[];
+    repartition: any[];
+  };
+  alertes: any[];
+}
 
-
-
-
+interface Partenaire {
+  id: string;
+  nom: string;
+  secteur: string;
+  employeesCount: number;
+  logo: string;
+  datePartenariat: string;
+  actif: boolean;
+}
 
 // Données fictives pour les statistiques générales
 const statsData = {
@@ -163,39 +194,159 @@ const alertesRecentesData = {
 const euroFormatter = (value: number) => `${value.toLocaleString()} GNF`;
 
 export default function EntrepriseDashboardPage() {
-  const { isAuthenticated, currentCompany, currentPartenaire, userRole } = useAuth();
+  const { user, loading, isAdmin, isRH } = useAuth();
   const router = useRouter();
+  
+  // États pour stocker les données
+  const [currentCompany, setCurrentCompany] = useState<Company | null>(null);
+  const [currentPartenaire, setCurrentPartenaire] = useState<Partenaire | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
   
   // Créer la référence en dehors des hooks
   const hasShownWelcome = React.useRef(false);
 
   // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
   useEffect(() => {
-    if (!isAuthenticated) {
-      console.log('Redirection vers la page de login');
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
-  
-  // Afficher un message de bienvenue adapté au type d'utilisateur
-  useEffect(() => {
-    if (isAuthenticated && !hasShownWelcome.current) {
-      hasShownWelcome.current = true;
-      
-      if (userRole === 'admin' && currentCompany) {
-        toast.success(`Bienvenue sur le tableau de bord de ${currentCompany.name}`, {
-          id: 'dashboard-welcome'
-        });
-      } else if (userRole === 'rh' && currentPartenaire) {
-        toast.success(`Bienvenue sur le tableau de bord de ${currentPartenaire.nom}`, {
-          id: 'dashboard-welcome'
-        });
+    // Attendre que le chargement de l'authentification soit terminé
+    if (!loading) {
+      if (!user) {
+        console.log('Redirection vers la page de login');
+        router.push('/login');
       }
     }
-  }, [currentCompany, currentPartenaire, isAuthenticated, userRole]);
+  }, [user, loading, router]);
   
-  // Afficher un état de chargement si aucune donnée n'est disponible
-  if ((userRole === 'admin' && !currentCompany) || (userRole === 'rh' && !currentPartenaire)) {
+  // Récupérer les données selon le rôle de l'utilisateur
+  useEffect(() => {
+    const fetchData = async () => {
+      // Ne pas essayer de récupérer les données si l'authentification est en cours ou si l'utilisateur n'est pas connecté
+      if (loading || !user) return;
+      
+      try {
+        if (isAdmin) {
+          // Récupérer les données de l'entreprise pour l'admin
+          const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+          
+          if (adminDoc.exists()) {
+            const adminData = adminDoc.data();
+            const companyId = adminData.companyId;
+            
+            if (companyId) {
+              const companyDoc = await getDoc(doc(db, 'companies', companyId));
+              
+              if (companyDoc.exists()) {
+                const companyData = companyDoc.data();
+                
+                // Créer un objet avec les données de l'entreprise
+                const company: Company = {
+                  id: companyDoc.id,
+                  name: companyData.name || 'Entreprise',
+                  industry: companyData.industry || 'Secteur non spécifié',
+                  employeesCount: companyData.employeesCount || 0,
+                  logo: companyData.logo || '/images/logos/default.svg',
+                  createdAt: companyData.createdAt?.toDate?.() || new Date().toISOString(),
+                  stats: {
+                    totalEmployes: companyData.stats?.totalEmployes || 100,
+                    demandesMois: companyData.stats?.demandesMois || 25,
+                    montantTotal: companyData.stats?.montantTotal || 50000,
+                    limiteRemboursement: companyData.stats?.limiteRemboursement || '15/06/2025',
+                    joursAvantRemboursement: companyData.stats?.joursAvantRemboursement || 15,
+                    dateLimiteRemboursement: companyData.stats?.dateLimiteRemboursement || '15/06/2025'
+                  },
+                  financeData: {
+                    demandes: companyData.financeData?.demandes || [
+                      { mois: 'Jan', demandes: 42 },
+                      { mois: 'Fév', demandes: 38 },
+                      { mois: 'Mar', demandes: 45 },
+                      { mois: 'Avr', demandes: 52 },
+                      { mois: 'Mai', demandes: 48 },
+                    ],
+                    avances: companyData.financeData?.avances || [
+                      { mois: 'Jan', montant: 42000 },
+                      { mois: 'Fév', montant: 38000 },
+                      { mois: 'Mar', montant: 45000 },
+                      { mois: 'Avr', montant: 52000 },
+                      { mois: 'Mai', montant: 48000 },
+                    ],
+                    repartition: companyData.financeData?.repartition || [
+                      { categorie: 'Loyer', montant: 32 },
+                      { categorie: 'Maladie', montant: 25 },
+                      { categorie: 'Éducation', montant: 18 },
+                      { categorie: 'Urgence familiale', montant: 15 },
+                      { categorie: 'Alimentation', montant: 10 },
+                      { categorie: 'Autres', montant: 5 },
+                    ]
+                  },
+                  alertes: companyData.alertes || [
+                    { id: 1, titre: "Dépassement de plafond", description: "Le plafond mensuel de demandes a été atteint", date: "02/05/2025", type: "warning" },
+                    { id: 2, titre: "Nouvelle demande", description: "Jean Dupont a soumis une nouvelle demande d'avance", date: "01/05/2025", type: "info" },
+                    { id: 3, titre: "Retard de paiement", description: "Échéance du 30/04 non honorée", date: "01/05/2025", type: "error" },
+                  ]
+                };
+                
+                setCurrentCompany(company);
+                
+                // Afficher un message de bienvenue
+                if (!hasShownWelcome.current) {
+                  hasShownWelcome.current = true;
+                  toast.success(`Bienvenue sur le tableau de bord de ${company.name}`, {
+                    id: 'dashboard-welcome'
+                  });
+                }
+              }
+            }
+          }
+        } else if (isRH) {
+          // Récupérer les données du partenaire pour le RH
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            const partenaireId = userData.partenaireId;
+            
+            if (partenaireId) {
+              const partenaireDoc = await getDoc(doc(db, 'partenaires', partenaireId));
+              
+              if (partenaireDoc.exists()) {
+                const partenaireData = partenaireDoc.data();
+                
+                // Créer un objet avec les données du partenaire
+                const partenaire: Partenaire = {
+                  id: partenaireDoc.id,
+                  nom: partenaireData.nom || 'Partenaire',
+                  secteur: partenaireData.secteur || 'Secteur non spécifié',
+                  employeesCount: partenaireData.employeesCount || 0,
+                  logo: partenaireData.logo || '/images/logos/default.svg',
+                  datePartenariat: partenaireData.datePartenariat || new Date().toISOString().split('T')[0],
+                  actif: partenaireData.actif || true
+                };
+                
+                setCurrentPartenaire(partenaire);
+                
+                // Afficher un message de bienvenue
+                if (!hasShownWelcome.current) {
+                  hasShownWelcome.current = true;
+                  toast.success(`Bienvenue sur le tableau de bord de ${partenaire.nom}`, {
+                    id: 'dashboard-welcome'
+                  });
+                }
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Erreur lors de la récupération des données:", error);
+        toast.error("Erreur lors du chargement des données");
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [user, loading, isAdmin, isRH]);
+  
+  // Afficher un état de chargement pendant l'authentification ou le chargement des données
+  if (loading || dataLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
@@ -203,8 +354,23 @@ export default function EntrepriseDashboardPage() {
     );
   }
   
+  // Si l'utilisateur n'est pas connecté, ne rien afficher (la redirection sera gérée par useEffect)
+  if (!user) {
+    return null;
+  }
+  
+  // Afficher un état de chargement si aucune donnée n'est disponible
+  if ((isAdmin && !currentCompany) || (isRH && !currentPartenaire)) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+        <p className="text-[var(--zalama-text)]">Chargement des données...</p>
+      </div>
+    );
+  }
+  
   // Adapter l'affichage en fonction du type d'utilisateur
-  if (userRole === 'admin' && currentCompany) {
+  if (isAdmin && currentCompany) {
     // Utiliser les données de l'entreprise connectée
     const entrepriseData = {
       totalEmployes: currentCompany.stats.totalEmployes,
@@ -225,7 +391,7 @@ export default function EntrepriseDashboardPage() {
     const montantsEvolution = currentCompany.financeData.avances;
     
     // Utiliser les données de répartition par motifs
-    const motifsDemandes = currentCompany.financeData.repartition.map((item, index) => ({
+    const motifsDemandes = currentCompany.financeData.repartition.map((item: any, index: number) => ({
       motif: item.categorie,
       valeur: item.montant,
       color: `hsl(${index * 45}, 70%, 50%)`
@@ -446,7 +612,7 @@ export default function EntrepriseDashboardPage() {
                       nameKey="motif"
                       label={({ motif, percent }) => `${motif}: ${(percent * 100).toFixed(0)}%`}
                     >
-                      {motifsDemandes.map((entry, index) => (
+                      {motifsDemandes.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -475,7 +641,7 @@ export default function EntrepriseDashboardPage() {
                 <button className="text-sm text-[var(--zalama-blue)] hover:underline">Voir toutes</button>
               </div>
               <div className="space-y-3 h-72 overflow-y-auto pr-2">
-                {alertesRecentes.map((alerte) => (
+                {alertesRecentes.map((alerte: any) => (
                   <div key={alerte.id} className="flex items-start gap-3 p-3 rounded-lg bg-[var(--zalama-card)]">
                     <div className="flex-shrink-0 mt-1">
                       {alerte.type === 'warning' && <AlertCircle className="h-5 w-5 text-[var(--zalama-amber)]" />}
@@ -554,7 +720,7 @@ export default function EntrepriseDashboardPage() {
         </div>
       </div>
     );
-  } else if (userRole === 'rh' && currentPartenaire) {
+  } else if (isRH && currentPartenaire) {
     // Créer des données adaptées pour le partenaire
     const partenaireData = {
       totalEmployes: currentPartenaire.employeesCount || 0,

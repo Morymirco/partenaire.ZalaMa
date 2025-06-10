@@ -162,7 +162,7 @@ const statsPerTypes = [
 ]
 
 export default function DemandesPage() {
-  const { isAuthenticated, currentCompany } = useAuth();
+ 
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,24 +172,19 @@ export default function DemandesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const filterMenuRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
   
   // Créer la référence en dehors des hooks
   const hasFinishedLoading = React.useRef(false);
   
   // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
-  
-  // Mettre fin au chargement quand l'entreprise est chargée
-  useEffect(() => {
-    if (currentCompany && !hasFinishedLoading.current) {
-      hasFinishedLoading.current = true;
-      setLoading(false);
-    }
-  }, [currentCompany]);
+ 
+    // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
+    useEffect(() => {
+      if (!loading && !user) {
+        router.push('/login');
+      }
+    }, [user, loading, router]);
   
   // Gérer le clic en dehors du menu des filtres
   useEffect(() => {
@@ -287,7 +282,7 @@ export default function DemandesPage() {
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold text-[var(--zalama-text)]">Demandes</h1>
-      <p className="text-[var(--zalama-text)]/70">Entreprise: {currentCompany?.name}</p>
+        {/* <p className="text-[var(--zalama-text)]/70">Entreprise: {currentCompany?.name}</p> */}
       
       {/* Statistiques */}
       <h2 className="text-xl font-bold text-[var(--zalama-text)] mt-2">Généralités sur les demandes</h2>

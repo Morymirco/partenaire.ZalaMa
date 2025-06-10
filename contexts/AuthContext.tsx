@@ -59,9 +59,27 @@ const login = async (email: string, password: string): Promise<boolean> => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
+    // Obtenir le token ID pour créer le cookie de session
+    const idToken = await user.getIdToken();
+    
+    // Créer le cookie de session via l'API
+    const response = await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ idToken }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Échec de la création de la session');
+    }
+    
     // Vérifier les claims personnalisés pour déterminer le rôle
     const idTokenResult = await user.getIdTokenResult();
+    console.log(idTokenResult);
     const role = idTokenResult.claims.role;
+    console.log(role);
     
     if (role === 'rh') {
       // Si c'est un RH, vérifier que son compte est actif dans Firestore
@@ -144,7 +162,14 @@ const login = async (email: string, password: string): Promise<boolean> => {
 // Fonction de déconnexion
 const logout = async (): Promise<void> => {
   try {
+    // Déconnexion de Firebase Auth
     await signOut(auth);
+    
+    // Supprimer le cookie de session via l'API
+    await fetch('/api/auth/session', {
+      method: 'DELETE',
+    });
+    
     toast.success("Déconnexion réussie");
   } catch (error: any) {
     console.error("Erreur lors de la déconnexion:", error);

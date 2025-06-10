@@ -7,16 +7,16 @@ import Image from "next/image";
 
 export default function Home() {
   const router = useRouter();
-  const { isAuthenticated } = useAuth();
+  // const { isAuthenticated } = useAuth();
 
-  useEffect(() => {
-    // Rediriger vers le dashboard si l'utilisateur est authentifié, sinon vers la page de login
-    if (isAuthenticated) {
-      window.location.href = "/dashboard";
-    } else {
-      window.location.href = "/login";
-    }
-  }, [isAuthenticated]);
+  // useEffect(() => {
+  //   // Rediriger vers le dashboard si l'utilisateur est authentifié, sinon vers la page de login
+  //   if (isAuthenticated) {
+  //     window.location.href = "/dashboard";
+  //   } else {
+  //     window.location.href = "/login";
+  //   }
+  // }, [isAuthenticated]);
 
   // Afficher un écran de chargement pendant la redirection
   return (

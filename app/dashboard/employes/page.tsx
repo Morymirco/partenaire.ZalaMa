@@ -1,105 +1,48 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Users, Search, Filter, Mail, Phone, Eye, Download, ChevronDown, Building2, Calendar, Clock } from 'lucide-react';
 import StatCard from '@/components/dashboard/StatCard';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { collection, doc, getDoc, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { Building2, Calendar, ChevronDown, Clock, Download, Eye, Filter, Mail, Phone, Search, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 
-// Données fictives pour les employés
-const employeesData = [
-  { 
-    id: 1, 
-    nom: "Dupont", 
-    prenom: "Jean", 
-    email: "jean.dupont@example.com", 
-    telephone: "06 12 34 56 78", 
-    poste: "Développeur Frontend", 
-    departement: "Technique", 
-    dateEmbauche: "15/03/2022",
-    statut: "Actif"
-  },
-  { 
-    id: 2, 
-    nom: "Martin", 
-    prenom: "Sophie", 
-    email: "sophie.martin@example.com", 
-    telephone: "06 23 45 67 89", 
-    poste: "Designer UX/UI", 
-    departement: "Création", 
-    dateEmbauche: "05/06/2021",
-    statut: "Actif"
-  },
-  { 
-    id: 3, 
-    nom: "Petit", 
-    prenom: "Thomas", 
-    email: "thomas.petit@example.com", 
-    telephone: "06 34 56 78 90", 
-    poste: "Chef de projet", 
-    departement: "Management", 
-    dateEmbauche: "10/01/2020",
-    statut: "Actif"
-  },
-  { 
-    id: 4, 
-    nom: "Leroy", 
-    prenom: "Emma", 
-    email: "emma.leroy@example.com", 
-    telephone: "06 45 67 89 01", 
-    poste: "Développeur Backend", 
-    departement: "Technique", 
-    dateEmbauche: "22/09/2022",
-    statut: "Actif"
-  }
-];
-
-// Statistiques pour le tableau de bord
-const stats = [
-  {
-    label: "Total des employés",
-    value: "248",
-    icon: <Users className="h-5 w-5" />,
-    accent: "bg-blue-600"
-  },
-  {
-    label: "Total Inscrits à ZaLaMa",
-    value: "100",
-    icon: <Calendar className="h-5 w-5" />,
-    accent: "bg-green-600"
-  },
-  {
-    label: "Nouveaux ce mois",
-    value: "12",
-    icon: <Clock className="h-5 w-5" />,
-    accent: "bg-amber-600"
-  },
-  {
-    label: "Taux de rétention",
-    value: "94%",
-    icon: <Building2 className="h-5 w-5" />,
-    accent: "bg-purple-600"
-  }
-];
-
-// Interface pour le type d'employé
-interface Employee {
-  id: number;
+// Interface pour le type d'employé (mise à jour selon votre logique)
+interface Employe {
+  id: string;
   nom: string;
   prenom: string;
+  genre: 'Homme' | 'Femme';
   email: string;
   telephone: string;
+  adresse: string;
   poste: string;
-  departement: string;
+  role: string;
+  typeContrat: 'CDI' | 'CDD' | 'Stage' | 'Freelance';
+  salaireNet: number;
   dateEmbauche: string;
-  statut: string;
+  partenaireId: string;
+  nomComplet: string;
+  dateCreation?: any;
+  userId?: string;
+  statut?: 'Actif' | 'Congé' | 'Inactif';
+}
+
+// Interface pour les données du partenaire/entreprise
+interface PartenaireData {
+  id: string;
+  nom: string;
+  secteur: string;
+  employeesCount: number;
+  logo: string;
 }
 
 // Départements disponibles
 const departments = [
   "Technique",
-  "Marketing",
+  "Marketing", 
   "Ventes",
   "Finance",
   "Ressources Humaines",
@@ -112,36 +55,177 @@ const departments = [
 const statuses = ["Actif", "Congé", "Inactif"];
 
 export default function EmployesPage() {
-  const { isAuthenticated, currentCompany, currentAdmin } = useAuth();
+  const { user, isAdmin, isRH, loading } = useAuth();
   const router = useRouter();
   
-  // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
-  useEffect(() => {
-    if (!isAuthenticated || !currentCompany) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, currentCompany, router]);
-  
   // États pour la gestion des employés
-  const [employees, setEmployees] = useState<Employee[]>(employeesData);
+  const [employees, setEmployees] = useState<Employe[]>([]);
+  const [partenaireData, setPartenaireData] = useState<PartenaireData | null>(null);
+  const [dataLoading, setDataLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employe | null>(null);
   const [isDepartmentDropdownOpen, setIsDepartmentDropdownOpen] = useState(false);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   
-  // Charger les données des employés depuis l'entreprise connectée
+  // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
   useEffect(() => {
-    if (currentCompany) {
-      // Dans une application réelle, nous chargerions les employés depuis une API
-      // Pour cette démo, nous utilisons les données fictives
-      setEmployees(employeesData);
-      toast.success(`Données des employés de ${currentCompany.name} chargées`);
+    if (!loading && !user) {
+      router.push('/login');
     }
-  }, [currentCompany]);
+  }, [user, loading, router]);
+  
+  // Charger les données des employés selon le rôle de l'utilisateur
+  useEffect(() => {
+    const fetchEmployeesData = async () => {
+      if (loading || !user) return;
+      
+      try {
+        let partenaireId = '';
+        
+        if (isAdmin) {
+          // Pour un admin, récupérer l'ID de l'entreprise
+          const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+          if (adminDoc.exists()) {
+            const adminData = adminDoc.data();
+            partenaireId = adminData.companyId;
+            
+            // Récupérer les données de l'entreprise
+            if (partenaireId) {
+              const companyDoc = await getDoc(doc(db, 'companies', partenaireId));
+              if (companyDoc.exists()) {
+                const companyData = companyDoc.data();
+                setPartenaireData({
+                  id: companyDoc.id,
+                  nom: companyData.name || 'Entreprise',
+                  secteur: companyData.industry || 'Secteur non spécifié',
+                  employeesCount: companyData.employeesCount || 0,
+                  logo: companyData.logo || '/images/logos/default.svg'
+                });
+              }
+            }
+          }
+        } else if (isRH) {
+          // Pour un RH, récupérer l'ID du partenaire
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            partenaireId = userData.partenaireId;
+            
+            // Récupérer les données du partenaire
+            if (partenaireId) {
+              const partenaireDoc = await getDoc(doc(db, 'partenaires', partenaireId));
+              if (partenaireDoc.exists()) {
+                const partenaireDocData = partenaireDoc.data();
+                setPartenaireData({
+                  id: partenaireDoc.id,
+                  nom: partenaireDocData.nom || 'Partenaire',
+                  secteur: partenaireDocData.secteur || 'Secteur non spécifié',
+                  employeesCount: partenaireDocData.employeesCount || 0,
+                  logo: partenaireDocData.logo || '/images/logos/default.svg'
+                });
+              }
+            }
+          }
+        }
+        
+        // Récupérer la liste des employés pour ce partenaire/entreprise
+        if (partenaireId) {
+          const employesQuery = query(
+            collection(db, 'employes'),
+            where('partenaireId', '==', partenaireId),
+            orderBy('dateCreation', 'desc')
+          );
+          
+          const employesSnapshot = await getDocs(employesQuery);
+          const employesList: Employe[] = [];
+          
+          employesSnapshot.forEach((doc) => {
+            const employeData = doc.data();
+            employesList.push({
+              id: doc.id,
+              nom: employeData.nom || '',
+              prenom: employeData.prenom || '',
+              genre: employeData.genre || 'Homme',
+              email: employeData.email || '',
+              telephone: employeData.telephone || '',
+              adresse: employeData.adresse || '',
+              poste: employeData.poste || '',
+              role: employeData.role || '',
+              typeContrat: employeData.typeContrat || 'CDI',
+              salaireNet: employeData.salaireNet || 0,
+              dateEmbauche: employeData.dateEmbauche || '',
+              partenaireId: employeData.partenaireId || '',
+              nomComplet: employeData.nomComplet || `${employeData.prenom} ${employeData.nom}`,
+              dateCreation: employeData.dateCreation,
+              userId: employeData.userId,
+              statut: employeData.statut || 'Actif'
+            });
+          });
+          
+          setEmployees(employesList);
+          toast.success(`${employesList.length} employé(s) chargé(s)`);
+        }
+      } catch (error) {
+        console.error("Erreur lors de la récupération des employés:", error);
+        toast.error("Erreur lors du chargement des employés");
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    
+    fetchEmployeesData();
+  }, [user, loading, isAdmin, isRH]);
+  
+  // Afficher un état de chargement
+  if (loading || dataLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      </div>
+    );
+  }
+  
+  // Si l'utilisateur n'est pas connecté, ne rien afficher
+  if (!user) {
+    return null;
+  }
+  
+  // Calculer les statistiques basées sur les données réelles
+  const stats = [
+    {
+      label: "Total des employés",
+      value: employees.length.toString(),
+      icon: <Users className="h-5 w-5" />,
+      accent: "bg-blue-600"
+    },
+    {
+      label: "Employés actifs",
+      value: employees.filter(emp => emp.statut === 'Actif').length.toString(),
+      icon: <Calendar className="h-5 w-5" />,
+      accent: "bg-green-600"
+    },
+    {
+      label: "Nouveaux ce mois",
+      value: employees.filter(emp => {
+        const dateEmbauche = new Date(emp.dateEmbauche);
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        return dateEmbauche.getMonth() === currentMonth && dateEmbauche.getFullYear() === currentYear;
+      }).length.toString(),
+      icon: <Clock className="h-5 w-5" />,
+      accent: "bg-amber-600"
+    },
+    {
+      label: "Avec compte utilisateur",
+      value: employees.filter(emp => emp.userId).length.toString(),
+      icon: <Building2 className="h-5 w-5" />,
+      accent: "bg-purple-600"
+    }
+  ];
   
   // Filtrer les employés en fonction des critères de recherche
   const filteredEmployees = employees.filter(employee => {
@@ -151,7 +235,7 @@ export default function EmployesPage() {
       employee.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       employee.poste.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesDepartment = selectedDepartment === null || employee.departement === selectedDepartment;
+    const matchesDepartment = selectedDepartment === null || employee.role === selectedDepartment;
     const matchesStatus = selectedStatus === null || employee.statut === selectedStatus;
     
     return matchesSearch && matchesDepartment && matchesStatus;
@@ -170,7 +254,7 @@ export default function EmployesPage() {
   };
   
   // Ouvrir le modal de visualisation des détails
-  const openViewModal = (employee: Employee) => {
+  const openViewModal = (employee: Employe) => {
     setSelectedEmployee(employee);
     setIsViewModalOpen(true);
   };
@@ -183,9 +267,9 @@ export default function EmployesPage() {
   
   // Exporter les données au format CSV
   const handleExportCSV = () => {
-    if (!currentCompany) return;
+    if (!partenaireData) return;
     
-    const headers = ["ID", "Nom", "Prénom", "Email", "Téléphone", "Poste", "Département", "Date d'embauche", "Statut"];
+    const headers = ["ID", "Nom", "Prénom", "Email", "Téléphone", "Poste", "Type de contrat", "Salaire", "Date d'embauche", "Statut"];
     const csvData = [
       headers.join(","),
       ...employees.map(employee => [
@@ -195,7 +279,8 @@ export default function EmployesPage() {
         employee.email,
         employee.telephone,
         employee.poste,
-        employee.departement,
+        employee.typeContrat,
+        employee.salaireNet,
         employee.dateEmbauche,
         employee.statut
       ].join(","))
@@ -205,7 +290,7 @@ export default function EmployesPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `employes_${currentCompany.name.toLowerCase().replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `employes_${partenaireData.nom.toLowerCase().replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
@@ -217,16 +302,16 @@ export default function EmployesPage() {
   return (
     <div className="py-4">
       
-      {/* En-tête avec le nom de l'entreprise */}
-      {currentCompany && (
+      {/* En-tête avec le nom de l'entreprise/partenaire */}
+      {partenaireData && (
         <div className="bg-[var(--zalama-card)] rounded-lg border border-[var(--zalama-border)] p-6 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-semibold text-[var(--zalama-text)]">Employés de {currentCompany.name}</h2>
+              <h2 className="text-xl font-semibold text-[var(--zalama-text)]">Employés de {partenaireData.nom}</h2>
               <p className="text-sm text-[var(--zalama-text)]/70 mt-1">Gestion des ressources humaines</p>
             </div>
             <div className="bg-[var(--zalama-blue)]/10 text-[var(--zalama-blue)] text-sm font-medium px-3 py-1 rounded-full">
-              {currentCompany.employeesCount} employés au total
+              {employees.length} employé(s) enregistré(s)
             </div>
           </div>
         </div>
@@ -361,107 +446,120 @@ export default function EmployesPage() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[18%]">Nom</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[18%]">Contact</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[14%]">Poste</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[14%]">Département</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[14%]">Contrat</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[14%]">Date d&apos;embauche</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[10%]">Statut</th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-[var(--zalama-text)]/70 uppercase tracking-wider w-[12%]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--zalama-border)]">
-              {currentEmployees.map((employee) => (
-                <tr key={employee.id} className="hover:bg-[var(--zalama-bg-light)]/50 transition-colors">
-                  <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
-                    <div className="flex items-center">
-                      <div className="h-8 w-8 rounded-full bg-[var(--zalama-blue)]/10 flex items-center justify-center text-[var(--zalama-blue)] font-medium flex-shrink-0">
-                        {employee.prenom[0]}{employee.nom[0]}
+              {currentEmployees.length > 0 ? (
+                currentEmployees.map((employee) => (
+                  <tr key={employee.id} className="hover:bg-[var(--zalama-bg-light)]/50 transition-colors">
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
+                      <div className="flex items-center">
+                        <div className="h-8 w-8 rounded-full bg-[var(--zalama-blue)]/10 flex items-center justify-center text-[var(--zalama-blue)] font-medium flex-shrink-0">
+                          {employee.prenom[0]}{employee.nom[0]}
+                        </div>
+                        <div className="ml-3 overflow-hidden">
+                          <div className="text-sm font-medium text-[var(--zalama-text)] truncate">{employee.nomComplet}</div>
+                          <div className="text-xs text-[var(--zalama-text)]/70 truncate">{employee.genre}</div>
+                        </div>
                       </div>
-                      <div className="ml-3 overflow-hidden">
-                        <div className="text-sm font-medium text-[var(--zalama-text)] truncate">{employee.prenom} {employee.nom}</div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
+                      <div className="text-sm text-[var(--zalama-text)]">
+                        <div className="flex items-center gap-1 overflow-hidden">
+                          <Mail className="h-3 w-3 text-[var(--zalama-text)]/70 flex-shrink-0" />
+                          <span className="truncate">{employee.email}</span>
+                        </div>
+                        <div className="flex items-center gap-1 mt-1 overflow-hidden">
+                          <Phone className="h-3 w-3 text-[var(--zalama-text)]/70 flex-shrink-0" />
+                          <span className="truncate">{employee.telephone}</span>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
-                    <div className="text-sm text-[var(--zalama-text)]">
-                      <div className="flex items-center gap-1 overflow-hidden">
-                        <Mail className="h-3 w-3 text-[var(--zalama-text)]/70 flex-shrink-0" />
-                        <span className="truncate">{employee.email}</span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
+                      <div className="text-sm text-[var(--zalama-text)] truncate">{employee.poste}</div>
+                      <div className="text-xs text-[var(--zalama-text)]/70 truncate">{employee.role}</div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
+                      <div className="text-sm text-[var(--zalama-text)] truncate">{employee.typeContrat}</div>
+                      <div className="text-xs text-[var(--zalama-text)]/70 truncate">{employee.salaireNet.toLocaleString()} GNF</div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
+                      <div className="text-sm text-[var(--zalama-text)] truncate">{employee.dateEmbauche}</div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        employee.statut === 'Actif' 
+                          ? 'bg-green-100 text-green-800' 
+                          : employee.statut === 'Congé' 
+                            ? 'bg-yellow-100 text-yellow-800' 
+                            : 'bg-red-100 text-red-800'
+                      }`}>
+                        {employee.statut}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => openViewModal(employee)}
+                          className="p-1 rounded-full hover:bg-[var(--zalama-bg-light)] text-[var(--zalama-text)]/70 hover:text-[var(--zalama-text)]"
+                          title="Voir les détails"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
                       </div>
-                      <div className="flex items-center gap-1 mt-1 overflow-hidden">
-                        <Phone className="h-3 w-3 text-[var(--zalama-text)]/70 flex-shrink-0" />
-                        <span className="truncate">{employee.telephone}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
-                    <div className="text-sm text-[var(--zalama-text)] truncate">{employee.poste}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
-                    <div className="text-sm text-[var(--zalama-text)] truncate">{employee.departement}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
-                    <div className="text-sm text-[var(--zalama-text)] truncate">{employee.dateEmbauche}</div>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap overflow-hidden text-ellipsis">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      employee.statut === 'Actif' 
-                        ? 'bg-green-100 text-green-800' 
-                        : employee.statut === 'Congé' 
-                          ? 'bg-yellow-100 text-yellow-800' 
-                          : 'bg-red-100 text-red-800'
-                    }`}>
-                      {employee.statut}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center justify-end gap-2">
-                      <button 
-                        onClick={() => openViewModal(employee)}
-                        className="p-1 rounded-full hover:bg-[var(--zalama-bg-light)] text-[var(--zalama-text)]/70 hover:text-[var(--zalama-text)]"
-                        title="Voir les détails"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
-                    </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--zalama-text)]/70">
+                    Aucun employé trouvé
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
         
         {/* Pagination */}
-        <div className="py-3 p-2 flex items-center justify-between border-t border-[var(--zalama-border)]">
-          <div className="text-sm text-[var(--zalama-text)]/70">
-            Affichage de {indexOfFirstEmployee + 1} à {Math.min(indexOfLastEmployee, filteredEmployees.length)} sur {filteredEmployees.length} employés
-          </div>
-          <div className="flex gap-1">
-            <button 
-              onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
-              disabled={currentPage === 1}
-              className={`px-3 py-1 rounded border border-[var(--zalama-border)] ${currentPage === 1 ? 'bg-[var(--zalama-bg-light)]/50 text-[var(--zalama-text)]/50 cursor-not-allowed' : 'bg-[var(--zalama-bg-light)] text-[var(--zalama-text)] hover:bg-[var(--zalama-bg-light)]/80 cursor-pointer'}`}
-            >
-              Précédent
-            </button>
-            
-            {Array.from({ length: Math.min(totalPages, 3) }, (_, i) => (
-              <button
-                key={i + 1}
-                onClick={() => handlePageChange(i + 1)}
-                className={`px-3 py-1 rounded border border-[var(--zalama-border)] ${currentPage === i + 1 ? 'bg-[var(--zalama-blue)] text-white' : 'bg-[var(--zalama-bg-light)] text-[var(--zalama-text)] hover:bg-[var(--zalama-bg-light)]/80'}`}
+        {filteredEmployees.length > 0 && (
+          <div className="py-3 p-2 flex items-center justify-between border-t border-[var(--zalama-border)]">
+            <div className="text-sm text-[var(--zalama-text)]/70">
+              Affichage de {indexOfFirstEmployee + 1} à {Math.min(indexOfLastEmployee, filteredEmployees.length)} sur {filteredEmployees.length} employés
+            </div>
+            <div className="flex gap-1">
+              <button 
+                onClick={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className={`px-3 py-1 rounded border border-[var(--zalama-border)] ${currentPage === 1 ? 'bg-[var(--zalama-bg-light)]/50 text-[var(--zalama-text)]/50 cursor-not-allowed' : 'bg-[var(--zalama-bg-light)] text-[var(--zalama-text)] hover:bg-[var(--zalama-bg-light)]/80 cursor-pointer'}`}
               >
-                {i + 1}
+                Précédent
               </button>
-            ))}
-            
-            <button 
-              onClick={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
-              disabled={currentPage === totalPages}
-              className={`px-3 py-1 rounded border border-[var(--zalama-border)] ${currentPage === totalPages ? 'bg-[var(--zalama-bg-light)]/50 text-[var(--zalama-text)]/50 cursor-not-allowed' : 'bg-[var(--zalama-bg-light)] text-[var(--zalama-text)] hover:bg-[var(--zalama-bg-light)]/80 cursor-pointer'}`}
-            >
-              Suivant
-            </button>
+              
+              {Array.from({ length: Math.min(totalPages, 3) }, (_, i) => (
+                <button
+                  key={i + 1}
+                  onClick={() => handlePageChange(i + 1)}
+                  className={`px-3 py-1 rounded border border-[var(--zalama-border)] ${currentPage === i + 1 ? 'bg-[var(--zalama-blue)] text-white' : 'bg-[var(--zalama-bg-light)] text-[var(--zalama-text)] hover:bg-[var(--zalama-bg-light)]/80'}`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              
+              <button 
+                onClick={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className={`px-3 py-1 rounded border border-[var(--zalama-border)] ${currentPage === totalPages ? 'bg-[var(--zalama-bg-light)]/50 text-[var(--zalama-text)]/50 cursor-not-allowed' : 'bg-[var(--zalama-bg-light)] text-[var(--zalama-text)] hover:bg-[var(--zalama-bg-light)]/80 cursor-pointer'}`}
+              >
+                Suivant
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
       
       {/* Modal de visualisation des détails */}
@@ -490,7 +588,7 @@ export default function EmployesPage() {
                   {selectedEmployee.prenom[0]}{selectedEmployee.nom[0]}
                 </div>
                 <div className="ml-4">
-                  <h2 className="text-xl font-semibold text-[var(--zalama-text)]">{selectedEmployee.prenom} {selectedEmployee.nom}</h2>
+                  <h2 className="text-xl font-semibold text-[var(--zalama-text)]">{selectedEmployee.nomComplet}</h2>
                   <p className="text-[var(--zalama-text)]/70">{selectedEmployee.poste}</p>
                 </div>
               </div>
@@ -507,6 +605,10 @@ export default function EmployesPage() {
                       <Phone className="h-4 w-4 text-[var(--zalama-text)]/70 mr-2" />
                       <span className="text-[var(--zalama-text)]">{selectedEmployee.telephone}</span>
                     </div>
+                    <div className="flex items-center">
+                      <Building2 className="h-4 w-4 text-[var(--zalama-text)]/70 mr-2" />
+                      <span className="text-[var(--zalama-text)]">{selectedEmployee.adresse}</span>
+                    </div>
                   </div>
                 </div>
                 
@@ -515,7 +617,7 @@ export default function EmployesPage() {
                   <div className="space-y-2">
                     <div className="flex items-center">
                       <Building2 className="h-4 w-4 text-[var(--zalama-text)]/70 mr-2" />
-                      <span className="text-[var(--zalama-text)]">{selectedEmployee.departement}</span>
+                      <span className="text-[var(--zalama-text)]">{selectedEmployee.role}</span>
                     </div>
                     <div className="flex items-center">
                       <Calendar className="h-4 w-4 text-[var(--zalama-text)]/70 mr-2" />
@@ -533,13 +635,24 @@ export default function EmployesPage() {
                       </div>
                       <span className="text-[var(--zalama-text)]">Statut: {selectedEmployee.statut}</span>
                     </div>
+                    <div className="flex items-center">
+                      <span className="text-[var(--zalama-text)]/70 mr-2">Salaire:</span>
+                      <span className="text-[var(--zalama-text)]">{selectedEmployee.salaireNet.toLocaleString()} GNF</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-[var(--zalama-text)]/70 mr-2">Contrat:</span>
+                      <span className="text-[var(--zalama-text)]">{selectedEmployee.typeContrat}</span>
+                    </div>
                   </div>
                 </div>
               </div>
               
               <div className="border-t border-[var(--zalama-border)] pt-4">
                 <p className="text-sm text-[var(--zalama-text)]/70">
-                  Note: Les informations des employés sont en lecture seule. Pour toute modification, veuillez contacter le service RH.
+                  {selectedEmployee.userId ? 
+                    "Cet employé possède un compte utilisateur actif." : 
+                    "Cet employé n'a pas encore de compte utilisateur."
+                  }
                 </p>
               </div>
             </div>

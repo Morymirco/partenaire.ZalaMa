@@ -1,39 +1,90 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-// Routes qui ne nécessitent pas d'authentification
-const publicRoutes = ['/login'];
+// Routes qui nécessitent une authentification
+const protectedRoutes = [
+  '/dashboard',
+  '/profile',
+  '/settings',
+  '/admin',
+  '/partenaires',
+  '/employees',
+  '/demandes',
+];
 
-// Routes statiques à ignorer
-const staticRoutes = ['/_next', '/api', '/images', '/fonts', '/favicon.ico'];
+// Routes accessibles uniquement aux administrateurs
+const adminRoutes = [
+  '/admin',
+  '/partenaires/create',
+  '/partenaires/edit',
+];
 
-export function middleware(request: NextRequest) {
-  const session = request.cookies.get('session');
+// Routes accessibles uniquement aux RH
+const rhRoutes = [
+  '/employees/manage',
+  '/demandes/approve',
+];
+
+// Routes publiques (pas besoin d'authentification)
+const publicRoutes = [
+  '/',
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/about',
+  '/contact',
+];
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   
-  // Ignorer les routes statiques et les fichiers
-  if (staticRoutes.some(route => pathname.startsWith(route)) || pathname.includes('.')) {
+  // Vérifier si la route est protégée
+  const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
+  const isAdminRoute = adminRoutes.some(route => pathname.startsWith(route));
+  const isRHRoute = rhRoutes.some(route => pathname.startsWith(route));
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+  
+  // Si c'est une route publique, autoriser l'accès
+  if (isPublicRoute) {
     return NextResponse.next();
   }
   
-  // Si l'utilisateur n'est pas connecté et essaie d'accéder à une route protégée
-  if (!session && !publicRoutes.includes(pathname)) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+  // Récupérer le token d'authentification depuis les cookies
+  const sessionCookie = request.cookies.get('session')?.value;
+  
+  // Si aucun cookie de session n'est trouvé et que la route est protégée
+  if (!sessionCookie && isProtectedRoute) {
+    // Rediriger vers la page de connexion
+    return NextResponse.redirect(new URL('/login', request.url));
   }
-
-  // Si l'utilisateur est déjà connecté et essaie d'accéder à la page de login ou à la racine
-  if (session && (publicRoutes.includes(pathname) || pathname === '/')) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+  
+  // Au lieu de vérifier le token ici, nous allons simplement vérifier sa présence
+  // La vérification complète sera effectuée dans l'API route
+  if (sessionCookie) {
+    // Récupérer le rôle depuis les headers (si disponible)
+    const userRole = request.headers.get('x-user-role') || '';
+    
+    // Vérifier les autorisations en fonction du rôle
+    if (isAdminRoute && userRole !== 'admin') {
+      // Rediriger vers le tableau de bord si l'utilisateur n'est pas admin
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    
+    if (isRHRoute && userRole !== 'rh' && userRole !== 'admin') {
+      // Rediriger vers le tableau de bord si l'utilisateur n'est ni RH ni admin
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    
+    // Continuer normalement
+    return NextResponse.next();
   }
-
+  
+  // Si aucune condition n'est remplie, continuer normalement
   return NextResponse.next();
 }
 
-// Configuration pour le middleware
+// Configurer le middleware pour s'exécuter sur toutes les routes sauf les ressources statiques
 export const config = {
   matcher: [
     /*
@@ -41,9 +92,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - images/ (public images)
-     * - fonts/ (public fonts)
+     * - public (public files)
      */
-    '/((?!_next/static|_next/image|favicon.ico|images|fonts).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public|images|api/auth/session).*)',
   ],
-};
+}; 
