@@ -107,7 +107,7 @@ const initialMessages: Record<string, Message[]> = {
 };
 
 export default function MessagesPage() {
-  const { isAuthenticated, currentCompany } = useAuth();
+  // const { isAuthenticated, currentCompany } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -122,26 +122,26 @@ export default function MessagesPage() {
   const hasFinishedLoading = React.useRef(false);
   
   // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
+  // useEffect(() => {
+  //   if (!isAuthenticated) {
+  //     router.push('/login');
+  //   }
+  // }, [isAuthenticated, router]);
   
   // Charger les messages
-  useEffect(() => {
-    if (currentCompany && !hasFinishedLoading.current) {
-      // Simuler un délai de chargement
-      setTimeout(() => {
-        // Récupérer les messages pour l'entreprise connectée
-        const companyId = currentCompany.id.toLowerCase();
-        const companyMessages = initialMessages[companyId] || [];
-        setMessages(companyMessages);
-        setLoading(false);
-        hasFinishedLoading.current = true;
-      }, 1000);
-    }
-  }, [currentCompany]);
+  // useEffect(() => {
+  //   if (currentCompany && !hasFinishedLoading.current) {
+  //     // Simuler un délai de chargement
+  //     setTimeout(() => {
+  //       // Récupérer les messages pour l'entreprise connectée
+  //       // const companyId = currentCompany.id.toLowerCase();
+  //       // const companyMessages = initialMessages[companyId] || [];
+  //       // setMessages(companyMessages);
+  //       setLoading(false);
+  //       hasFinishedLoading.current = true;
+  //     }, 1000);
+  //   }
+  //   }, [currentCompany]);
   
   // Faire défiler automatiquement vers le bas lorsque de nouveaux messages sont ajoutés
   useEffect(() => {

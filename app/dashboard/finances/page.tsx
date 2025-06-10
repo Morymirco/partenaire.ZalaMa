@@ -147,7 +147,7 @@ const depensesData = [
 const euroFormatter = (value: number) => `${value.toLocaleString()} GNF`;
 
 export default function FinancesPage() {
-  const { isAuthenticated, currentCompany } = useAuth();
+  // const { isAuthenticated, currentCompany } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   
@@ -155,19 +155,19 @@ export default function FinancesPage() {
   const hasFinishedLoading = React.useRef(false);
   
   // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    }
-  }, [isAuthenticated, router]);
+  // useEffect(() => {
+  //   if (!isAuthenticated) {
+  //     router.push('/login');
+  //   }
+  // }, [isAuthenticated, router]);
   
-  // Mettre fin au chargement quand l'entreprise est chargée
-  useEffect(() => {
-    if (currentCompany && !hasFinishedLoading.current) {
-      hasFinishedLoading.current = true;
-      setLoading(false);
-    }
-  }, [currentCompany]);
+  // // Mettre fin au chargement quand l'entreprise est chargée
+  // useEffect(() => {
+  //   if (currentCompany && !hasFinishedLoading.current) {
+  //     hasFinishedLoading.current = true;
+  //     setLoading(false);
+  //   }
+  // }, [currentCompany]);
   // Afficher un indicateur de chargement pendant la vérification de l'authentification
   if (loading) {
     return (
@@ -179,16 +179,16 @@ export default function FinancesPage() {
   }
   
   // Générer les statistiques pour l'entreprise connectée
-  const stats = getStats(currentCompany);
+  // const stats = getStats(currentCompany);
   
   // Utiliser les données de l'entreprise pour les graphiques si disponibles
-  const avancesData = currentCompany?.financeData?.avances || evolutionData;
-  const repartitionData = currentCompany?.financeData?.repartition || depensesData;
+  // const avancesData = currentCompany?.financeData?.avances || evolutionData;
+  // const repartitionData = currentCompany?.financeData?.repartition || depensesData;
   
   return (
     <div className="flex flex-col gap-6 py-4">
       <h1 className="text-2xl font-bold text-[var(--zalama-text)]">Finances</h1>
-      <p className="text-[var(--zalama-text)]/70 mb-4">Entreprise: {currentCompany?.name}</p>
+      {/* <p className="text-[var(--zalama-text)]/70 mb-4">Entreprise: {currentCompany?.name}</p> */}
       
       {/* Statistiques */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
