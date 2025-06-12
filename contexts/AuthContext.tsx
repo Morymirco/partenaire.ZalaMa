@@ -30,6 +30,7 @@ interface AuthUser {
   displayName?: string | null;
   photoURL?: string | null;
   active?: boolean;
+  partenaireId?: string;
 }
 
 interface AuthContextType {
@@ -202,6 +203,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
             if (userDoc.exists()) {
               userData = userDoc.data();
+
             }
           }
           
@@ -212,7 +214,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             role: role,
             displayName: firebaseUser.displayName || userData.displayName,
             photoURL: firebaseUser.photoURL || userData.photoURL,
-            active: userData.active
+            active: userData.active,
+            partenaireId: userData.partenaireId
           });
         } catch (error) {
           console.error("Erreur lors de la récupération des données utilisateur:", error);

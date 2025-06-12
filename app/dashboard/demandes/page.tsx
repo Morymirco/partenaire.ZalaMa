@@ -1,9 +1,13 @@
 "use client";
-import React, { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { FileText, CheckCircle, Clock, AlertCircle, Search, Filter, Calendar, Download, Plus, MoreHorizontal, User, Tag, MessageSquare, PlusSquare, MailWarning, DollarSign, SquaresExclude } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
 import StatCard from '@/components/dashboard/StatCard';
+import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { AuthUser } from '@/types/auth';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { AlertCircle, Calendar, CheckCircle, Clock, DollarSign, Download, FileText, Filter, MailWarning, MessageSquare, MoreHorizontal, PlusSquare, Search, SquaresExclude, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import React, { useEffect, useRef, useState } from 'react';
+import { toast } from 'react-hot-toast';
 
 // Types de services disponibles
 const serviceTypes = [
@@ -162,7 +166,6 @@ const statsPerTypes = [
 ]
 
 export default function DemandesPage() {
- 
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -172,20 +175,90 @@ export default function DemandesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const filterMenuRef = useRef<HTMLDivElement>(null);
-  const { user } = useAuth();
+  const { user } = useAuth() as { user: AuthUser | null };
+  const [demandes, setDemandes] = useState<any[]>([]);
   
   // Créer la référence en dehors des hooks
   const hasFinishedLoading = React.useRef(false);
   
   // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
- 
-    // Rediriger vers la page de login si l'utilisateur n'est pas authentifié
-    useEffect(() => {
-      if (!loading && !user) {
-        router.push('/login');
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
+  // Récupérer les demandes des employés du partenaire
+  useEffect(() => {
+    const fetchDemandes = async () => {
+      if (!user) return;
+
+      console.log(user);
+      
+      setLoading(true);
+      try {
+        // Récupérer l'ID du partenaire depuis l'utilisateur connecté
+        const partenaireId = user.partenaireId;
+        
+        if (!partenaireId) {
+          console.error('Aucun ID de partenaire trouvé pour l\'utilisateur');
+          return;
+        }
+
+        // Récupérer tous les employés du partenaire
+        const employesRef = collection(db, 'employes');
+        const employesQuery = query(employesRef, where('partenaireId', '==', partenaireId));
+        const employesSnap = await getDocs(employesQuery);
+        
+        const employeeIds = employesSnap.docs.map(doc => doc.id);
+        
+        if (employeeIds.length === 0) {
+          console.log('Aucun employé trouvé pour ce partenaire');
+          setDemandes([]);
+          return;
+        }
+
+        // Récupérer toutes les demandes pour ces employés
+        const demandesRef = collection(db, 'salary_advance_requests');
+        const demandesQuery = query(demandesRef, where('employeId', 'in', employeeIds));
+        const demandesSnap = await getDocs(demandesQuery);
+
+        const demandesList = demandesSnap.docs.map(doc => {
+          const data = doc.data();
+          // Récupérer les données de l'employé correspondant
+          const employeeDoc = employesSnap.docs.find(emp => emp.id === data.employeId);
+          const employeeData = employeeDoc?.data();
+          
+          return {
+            id: doc.id,
+            titre: data.motif || 'Demande d\'avance sur salaire',
+            description: data.commentaire || '',
+            date: data.dateCreation ? new Date(data.dateCreation.toDate()).toLocaleDateString() : '',
+            type: 'Avance sur Salaire',
+            serviceId: 'avance-salaire',
+            montant: data.montantDemande || 0,
+            demandeur: `${employeeData?.prenom || ''} ${employeeData?.nom || ''}`.trim(),
+            statut: data.statut === 'EN_ATTENTE' ? 'En attente' : 
+                   data.statut === 'APPROUVEE' ? 'Approuvée' : 
+                   data.statut === 'REFUSEE' ? 'Refusée' : 
+                   data.statut === 'EN_COURS' ? 'En cours de traitement' : 'En attente',
+            priorite: data.priorite || 'Normale',
+            commentaires: data.commentaires?.length || 0
+          };
+        });
+
+        setDemandes(demandesList);
+      } catch (error) {
+        console.error('Erreur lors de la récupération des demandes:', error);
+        toast.error('Erreur lors du chargement des demandes');
+      } finally {
+        setLoading(false);
       }
-    }, [user, loading, router]);
-  
+    };
+
+    fetchDemandes();
+  }, [user]);
+
   // Gérer le clic en dehors du menu des filtres
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -201,7 +274,7 @@ export default function DemandesPage() {
   }, []);
 
   // Filtrer les demandes en fonction des filtres sélectionnés
-  const filteredDemandes = demandesData.filter(demande => {
+  const filteredDemandes = demandes.filter(demande => {
     // Filtre par terme de recherche
     const matchesSearch = searchTerm === '' || 
       demande.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||

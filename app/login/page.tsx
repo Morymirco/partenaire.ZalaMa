@@ -50,14 +50,7 @@ export default function LoginPage() {
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             Portail des entreprises partenaires
           </p>
-          <div className="mt-3 text-xs text-gray-500 dark:text-gray-500">
-            <p>Pour la démo, utilisez les identifiants suivants :</p>
-            <ul className="list-disc list-inside mt-1">
-              <li>admin@acme.com / password123</li>
-              <li>admin@globex.com / password123</li>
-              <li>admin@stark.com / password123</li>
-            </ul>
-          </div>
+    
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
